@@ -5,8 +5,11 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
+import android.graphics.PointF;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 /**
@@ -58,9 +61,11 @@ public class LineGraph extends View {
     // fattore di scala
     private float zoom = 1.0f;
     // punto in alto a sinistra del rettangolo del viewport
-    private Point translate = new Point(0,0);
+    private PointF translate = new PointF(0, 0);
     //endregion
 
+    // lista di punti relativi agli elementi della serie
+    PointF[] points;
 
 
     public LineGraph(Context context) {
@@ -76,46 +81,47 @@ public class LineGraph extends View {
     }
 
     //region stato interno
-    public Series<?> getSeries(){
+    public Series<?> getSeries() {
         return series;
     }
 
-    public void setSeries(Series<?> s){
+    public void setSeries(Series<?> s) {
         this.series = s;
         this.selectedIndex = -1;
+        this.points = new PointF[this.series.getCount()];
         updateRange();
         updateGraph();
     }
 
-    public void setSelectedIndex(int sel){
+    public void setSelectedIndex(int sel) {
         this.selectedIndex = sel;
     }
 
-    public int getBackgroundColor(){
+    public int getBackgroundColor() {
         return backgroundColor;
     }
 
-    public void setBackgroundColor(int color){
+    public void setBackgroundColor(int color) {
         this.backgroundColor = color;
     }
 
-    public int getAxisColor(){
+    public int getAxisColor() {
         return axisColor;
     }
 
-    public void setAxisColor(int color){
+    public void setAxisColor(int color) {
         this.axisColor = color;
     }
 
-    public void setSeriesColor(int color){
+    public void setSeriesColor(int color) {
         this.seriesColor = color;
     }
 
-    public int getSeriesColor(){
+    public int getSeriesColor() {
         return this.seriesColor;
     }
 
-    public void setSeriesWidth(int width){
+    public void setSeriesWidth(int width) {
         this.seriesWidth = width;
     }
 
@@ -131,11 +137,11 @@ public class LineGraph extends View {
         this.axisDelta = axisDelta;
     }
 
-    public int getAxisLineWidth(){
+    public int getAxisLineWidth() {
         return axisLineWidth;
     }
 
-    public void setAxisLineWidth(int width){
+    public void setAxisLineWidth(int width) {
         this.axisLineWidth = width;
     }
 
@@ -179,11 +185,11 @@ public class LineGraph extends View {
         this.zoom = zoom;
     }
 
-    public Point getTranslate() {
+    public PointF getTranslate() {
         return translate;
     }
 
-    public void setTranslate(Point translate) {
+    public void setTranslate(PointF translate) {
         this.translate = translate;
     }
 
@@ -203,18 +209,18 @@ public class LineGraph extends View {
         this.font = font;
     }
 
-    public float getTextSize(){
+    public float getTextSize() {
         return textSize;
     }
 
-    public void setTextSize(float size){
+    public void setTextSize(float size) {
         this.textSize = size;
     }
     //endregion
 
     //region disegno
     @Override
-    protected  void onDraw(Canvas canvas){
+    protected void onDraw(Canvas canvas) {
 
         // utilizziamo questo oggetto per definire
         // colori, font, tipi di linee ecc
@@ -248,11 +254,11 @@ public class LineGraph extends View {
         // disegniamo gli assi
         paint.setColor(this.axisColor);
         paint.setStrokeWidth(this.axisLineWidth);
-        canvas.drawLine(0,0,0,height, paint);
+        canvas.drawLine(0, 0, 0, height, paint);
         canvas.drawLine(0, height, width, height, paint);
 
         // disegniamo la linea
-        if(this.series != null){
+        if (this.series != null) {
             paint.setColor(this.seriesColor);
             paint.setStrokeWidth(this.seriesWidth);
 
@@ -263,35 +269,44 @@ public class LineGraph extends View {
 
             double d1, d2, val1, val2 = 0;
             // il valore minimo della serie sara' lo 0 sulle y
-            for(int i = 1; i < this.series.getCount(); i++){
+            for (int i = 1; i < this.series.getCount(); i++) {
                 d1 = this.series.valueAt(i - 1);
                 d2 = this.series.valueAt(i);
 
                 val1 = (d1 - min) * pypu;
                 val2 = (d2 - min) * pypu;
 
-                canvas.drawLine(
-                        (float) ((i-1) * pxpu),
-                        (float) (height - val1),
-                        (float) (i * pxpu),
-                        (float) (height - val2),
-                        paint);
+                // salvo il valore del punto della serie
+                // nelle sistema di coordinate del controllo  per
+                // facilitare la selezione
+
+                PointF p1 = points[i - 1] == null ? points[i - 1] = new PointF() : points[i - 1];
+                PointF p2 = points[i] == null ? points[i] = new PointF() : points[i];
+
+                p1.x = (float) ((i - 1) * pxpu);
+                p1.y = (float) (height - val1);
+
+                p2.x = (float) (i * pxpu);
+                p2.y = (float) (height - val2);
+
+
+                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint);
             }
 
             // disegno un rettangolo attorno al punto selezionato
-            if(this.selectedIndex != -1){
+            if (this.selectedIndex != -1) {
                 double d = this.series.valueAt(this.selectedIndex);
                 double val = (d - min) * pypu;
 
                 canvas.drawRect(
-                        (float)(pxpu * selectedIndex - precision/2),
-                        (float)(height - val - precision / 2),
-                        (float)(pxpu * selectedIndex - precision/2) + precision,
-                        (float)(height - val - precision / 2) + precision, paint);
+                        (float) (pxpu * selectedIndex - precision / 2),
+                        (float) (height - val - precision / 2),
+                        (float) (pxpu * selectedIndex - precision / 2) + precision,
+                        (float) (height - val - precision / 2) + precision, paint);
             }
 
             // disegno le etichette testuali
-            if(this.isDrawLabels()){
+            if (this.isDrawLabels()) {
 
                 // --------------------------------
                 // disegniamo le tacche sull'asse y
@@ -315,17 +330,17 @@ public class LineGraph extends View {
                 int availableSpace = axisDelta - 2 * labelPadding;
 
                 // il numero di zeri che ci stanno nello spazio disponibile
-                int zeroes = (int)((axisDelta - 2 * labelPadding)/ zeroWidth);
+                int zeroes = (int) ((axisDelta - 2 * labelPadding) / zeroWidth);
 
                 // valore (non in pixel ma numerico) della distanza fra due tacche
-                double tickValue = 1.0 * (max-min) / nTick;
+                double tickValue = 1.0 * (max - min) / nTick;
 
-                for(int i = 0; i <= nTick; i++){
+                for (int i = 0; i <= nTick; i++) {
                     // calcoliamo il valore associato ad ogni tacca
                     // il numero di tacche puo' essere impostato dallo sviluppatore
                     String toDraw = "" + (min + i * tickValue);
 
-                    if(paint.measureText(toDraw) > availableSpace){
+                    if (paint.measureText(toDraw) > availableSpace) {
                         // devo tagliare la stringa
                         toDraw = toDraw.substring(0, zeroes);
                     }
@@ -333,16 +348,16 @@ public class LineGraph extends View {
                     // disegno la tacchetta
                     canvas.drawLine(
                             -tickLength,
-                            height - (i* tickDistance) - paint.getFontMetrics().bottom,
+                            height - (i * tickDistance) - paint.getFontMetrics().bottom,
                             0,
-                            height - (i* tickDistance) - paint.getFontMetrics().bottom,
+                            height - (i * tickDistance) - paint.getFontMetrics().bottom,
                             paint);
 
                     // disegno il valore numerico
                     canvas.drawText(
                             toDraw,
                             -axisDelta + labelPadding,
-                            height - (i* tickDistance),
+                            height - (i * tickDistance),
                             paint);
                 }
 
@@ -351,7 +366,7 @@ public class LineGraph extends View {
                 //---------------------------------
 
                 // tacchette
-                for(int i = 0; i < this.series.getCount(); i++){
+                for (int i = 0; i < this.series.getCount(); i++) {
                     canvas.drawLine(
                             Math.round(i * pxpu),
                             height + tickLength,
@@ -371,12 +386,12 @@ public class LineGraph extends View {
                 // quante lettere per ogni label ?
                 int chars = (int) (pxpu / pixelPerM);
 
-                if(chars > 3){
+                if (chars > 3) {
                     // facciamo apparire le label quando ci stanno almeno 4
                     // caratteri, se non ci stanno tutte mettiamo i puntini
-                    for(int i = 0; i < this.series.getCount(); i++){
+                    for (int i = 0; i < this.series.getCount(); i++) {
                         String toDraw = this.series.itemAt(i).toString();
-                        if(paint.measureText(toDraw) > pxpu){
+                        if (paint.measureText(toDraw) > pxpu) {
                             // devo tagliare la stringa
                             toDraw = toDraw.substring(0, chars - 3) + "...";
                         }
@@ -385,7 +400,7 @@ public class LineGraph extends View {
                         canvas.drawText(
                                 toDraw,
                                 Math.round(i * pxpu) - actualStringWidth / 2,
-                                height + axisDelta/ 2,
+                                height + axisDelta / 2,
                                 paint);
                     }
 
@@ -401,8 +416,123 @@ public class LineGraph extends View {
         canvas.restore();
     }
 
+    private float previousX1 = -1.0f;
+    private float previousY1 = -1.0f;
+
+    private float previousX2 = -1.0f;
+    private float previousY2 = -1.0f;
+
+    private double oldDistance = 0.0f;
+
+    private boolean multitouch;
 
 
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+
+        float x = event.getX();
+        float y = event.getY();
+
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                if(event.getPointerCount() == 1) {
+                    previousX1 = x;
+                    previousY1 = y;
+                    int checkSelected = this.pickCorrelation(x, y);
+                    if (checkSelected != -1) {
+                        this.selectedIndex = checkSelected;
+                        this.invalidate();
+                    }
+                    return true;
+                }
+
+
+            case MotionEvent.ACTION_MOVE:
+                switch (event.getPointerCount()) {
+                    case 1:
+                        if(multitouch){
+                            return true;
+                        }
+                        float dx = (x - previousX1) * this.zoom;
+                        float dy = (y - previousY1) * this.zoom;
+                        this.previousX1 = x;
+                        this.previousY1 = y;
+                        this.translate.set(
+                                this.translate.x + dx,
+                                this.translate.y + dy
+                        );
+                        this.invalidate();
+                        return true;
+
+                    case 2:
+                        multitouch = true;
+                        MotionEvent.PointerCoords touch1 = new MotionEvent.PointerCoords();
+                        MotionEvent.PointerCoords touch2 = new MotionEvent.PointerCoords();
+
+                        event.getPointerCoords(0, touch1);
+                        event.getPointerCoords(1, touch2);
+
+                        double distance = Math.sqrt(
+                                Math.pow(touch2.x - touch1.x, 2) +
+                                        Math.pow(touch2.y - touch1.y, 2));
+
+                        if (distance - oldDistance > 0) {
+                            zoom += 0.01;
+                            this.invalidate();
+                        }
+
+                        if (distance - oldDistance < 0) {
+                            zoom -= 0.01;
+                            this.invalidate();
+                        }
+
+                        oldDistance = distance;
+
+                        // recupero la posizione del touch1 e touch 2 corrente
+                        return true;
+
+                }
+
+
+            case MotionEvent.ACTION_UP:
+                previousX1 = -1.0f;
+                previousY1 = -1.0f;
+                multitouch = false;
+               return true;
+
+        }
+
+        return false;
+    }
+
+
+    final static int TOUCHSIZE = 60;
+
+    private int pickCorrelation(float touch_x, float touch_y) {
+        // riporto la x e la y nel sistema di coordinate del controllo
+        // applicando le trasformazioni al contrario
+
+        float x = (touch_x / zoom) - translate.x - axisDelta;
+        float y = (touch_y / zoom) - translate.y - axisDelta;
+
+
+        RectF area = new RectF();
+        int i = 0;
+        for (PointF p : points) {
+            area.set(
+                    p.x - TOUCHSIZE / 2,
+                    p.y - TOUCHSIZE / 2,
+                    p.x + TOUCHSIZE / 2,
+                    p.y + TOUCHSIZE / 2);
+            if (area.contains(x, y)) {
+                return i;
+            } else {
+                i++;
+            }
+        }
+
+        return -1;
+    }
 
     //endregion
 
@@ -424,7 +554,6 @@ public class LineGraph extends View {
             }
         }
     }
-
 
 
 }
