@@ -1,6 +1,7 @@
 package com.example.davide.iumex3;
 
 import android.app.Activity;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -9,6 +10,7 @@ import android.view.MenuItem;
 public class ControlTest extends Activity {
 
     Series<String> s = null;
+    LineGraph graph = null;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -24,10 +26,12 @@ public class ControlTest extends Activity {
                 s.addElement("qualcosa " + i, Math.random() * 1000);
             }
         }
-        LineGraph graph = (LineGraph) findViewById(R.id.linegraph);
+          graph = (LineGraph) findViewById(R.id.linegraph);
         graph.setSeries(s);
         graph.setSelectedIndex(2);
         graph.invalidate();
+
+
     }
 
     @Override
@@ -50,7 +54,19 @@ public class ControlTest extends Activity {
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
-        if (id == R.id.action_settings) {
+        if (id == R.id.dark) {
+            graph.setBackgroundColor(Color.BLACK);
+            graph.setAxisColor(Color.WHITE);
+            graph.setSeriesColor(Color.GREEN);
+            graph.invalidate();
+            return true;
+        }
+
+        if (id == R.id.light) {
+            graph.setBackgroundColor(Color.WHITE);
+            graph.setAxisColor(Color.BLACK);
+            graph.setSeriesColor(Color.RED);
+            graph.invalidate();
             return true;
         }
         return super.onOptionsItemSelected(item);

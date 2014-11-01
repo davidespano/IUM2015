@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -64,9 +63,29 @@ public class LineGraph extends View {
     private PointF translate = new PointF(0, 0);
     //endregion
 
-    // lista di punti relativi agli elementi della serie
+    //region variabili per l'interazione touch
+
+    // lista di punti relativi agli elementi della serie, utilizzati
+    // per la selezione di un punto da evidenziare (con un rettangolo)
+    // tramite tocco sullo schermo
     PointF[] points;
 
+    // registrano la posizione precedente del tocco su schermo
+    // per implementare il  pan del grafico
+    private float previousX = -1.0f;
+    private float previousY = -1.0f;
+
+    // registra la distanza precedente fra i due tocchi su schermo
+    private double oldDistance = 0.0f;
+
+    // indica che abbiamo iniziato la gestione di un gesto
+    // multitouch (con piu' di un dito sullo schermo)
+    private boolean multitouch = false;
+
+    // dimensione dell'area "toccabile" attorno ad un elemento della
+    // serie per selezionarlo.
+    final static int TOUCHSIZE = 60;
+    //endregion
 
     public LineGraph(Context context) {
         super(context);
@@ -90,7 +109,7 @@ public class LineGraph extends View {
         this.selectedIndex = -1;
         this.points = new PointF[this.series.getCount()];
         updateRange();
-        updateGraph();
+        this.invalidate();
     }
 
     public void setSelectedIndex(int sel) {
@@ -218,6 +237,12 @@ public class LineGraph extends View {
     }
     //endregion
 
+    /**
+     * Metodo che definisce come il controllo venga disegnato a video. Questo
+     * metodo e' definito nella classe View (la superclasse di tutti i controlli
+     * grafici) e noi lo ridefiniamo (override).
+     * @param canvas rappresenta la zona di schermo dove il controllo si deve disegnare
+     */
     //region disegno
     @Override
     protected void onDraw(Canvas canvas) {
@@ -392,8 +417,9 @@ public class LineGraph extends View {
                     for (int i = 0; i < this.series.getCount(); i++) {
                         String toDraw = this.series.itemAt(i).toString();
                         if (paint.measureText(toDraw) > pxpu) {
+                            int cutIndex = toDraw.length() <= chars ?  toDraw.length() : chars;
                             // devo tagliare la stringa
-                            toDraw = toDraw.substring(0, chars - 3) + "...";
+                            toDraw = toDraw.substring(0, cutIndex - 3) + "...";
                         }
 
                         float actualStringWidth = paint.measureText(toDraw);
@@ -416,17 +442,12 @@ public class LineGraph extends View {
         canvas.restore();
     }
 
-    private float previousX1 = -1.0f;
-    private float previousY1 = -1.0f;
-
-    private float previousX2 = -1.0f;
-    private float previousY2 = -1.0f;
-
-    private double oldDistance = 0.0f;
-
-    private boolean multitouch;
-
-
+    /**
+     * Metodo che gestiste l'input tramite tocco sullo schermo.
+     * @param event un oggetto che fornisce i dati relativi alla posizione
+     *              dei diversi tocchi su schermo
+     * @return true se l'evento e' stato gestito, false altrimenti
+     */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
 
@@ -435,9 +456,10 @@ public class LineGraph extends View {
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                // prima posizione del primo tocco
                 if(event.getPointerCount() == 1) {
-                    previousX1 = x;
-                    previousY1 = y;
+                    previousX = x;
+                    previousY = y;
                     int checkSelected = this.pickCorrelation(x, y);
                     if (checkSelected != -1) {
                         this.selectedIndex = checkSelected;
@@ -448,15 +470,28 @@ public class LineGraph extends View {
 
 
             case MotionEvent.ACTION_MOVE:
+                // uno o piu' tocchi precedentemente ricevuti si sono mossi
                 switch (event.getPointerCount()) {
                     case 1:
+                        // c'e' un solo tocco su schermo
                         if(multitouch){
+                            // qui evitiamo di gestire il pan nel caso in cui
+                            // l'utente abbia prima effettuato un pinch
+                            // ed abbia poi rilasciato solo un dito dallo schermo
                             return true;
                         }
-                        float dx = (x - previousX1) * this.zoom;
-                        float dy = (y - previousY1) * this.zoom;
-                        this.previousX1 = x;
-                        this.previousY1 = y;
+
+                        // recuperiamo il delta fra la posizione corrente e quella
+                        // precedente. Dobbiamo dividere per il fattore di scala
+                        // per avere la distanza nel sistema di riferimento
+                        // originario
+                        float dx = (x - previousX) / this.zoom;
+                        float dy = (y - previousY) / this.zoom;
+                        this.previousX = x;
+                        this.previousY = y;
+
+                        // aggiorniamo la traslazione spostandola di dx sulle x
+                        // e di dy sulle y
                         this.translate.set(
                                 this.translate.x + dx,
                                 this.translate.y + dy
@@ -465,24 +500,34 @@ public class LineGraph extends View {
                         return true;
 
                     case 2:
+                        // qui gestiamo il pinch
+
+                        // teniamo traccia del fatto che l'utente abbia iniziato un pinch
+                        // (vedi sopra)
                         multitouch = true;
+
+                        // recuperiamo la posizione corrente del tocco 1 e del tocco 2
                         MotionEvent.PointerCoords touch1 = new MotionEvent.PointerCoords();
                         MotionEvent.PointerCoords touch2 = new MotionEvent.PointerCoords();
 
                         event.getPointerCoords(0, touch1);
                         event.getPointerCoords(1, touch2);
 
+                        // calcoliamo la distanza attuale
                         double distance = Math.sqrt(
                                 Math.pow(touch2.x - touch1.x, 2) +
                                         Math.pow(touch2.y - touch1.y, 2));
 
+                        // confrontiamo con la precedente
                         if (distance - oldDistance > 0) {
-                            zoom += 0.01;
+                            // ingrandisco la vista
+                            zoom += 0.03;
                             this.invalidate();
                         }
 
                         if (distance - oldDistance < 0) {
-                            zoom -= 0.01;
+                            // rimpicciolisco la vista
+                            zoom -= 0.03;
                             this.invalidate();
                         }
 
@@ -495,9 +540,11 @@ public class LineGraph extends View {
 
 
             case MotionEvent.ACTION_UP:
-                previousX1 = -1.0f;
-                previousY1 = -1.0f;
+                // reset delle variabili di stato
+                previousX = -1.0f;
+                previousY = -1.0f;
                 multitouch = false;
+                oldDistance = 0.0f;
                return true;
 
         }
@@ -505,17 +552,25 @@ public class LineGraph extends View {
         return false;
     }
 
-
-    final static int TOUCHSIZE = 60;
-
+    /**
+     * Calcola quale fra i punti della serie sia stato toccato dall'utente
+     * @param touch_x ascissa del tocco dell'utente
+     * @param touch_y ordinata del tocco dell'utente
+     * @return l'indice dell'elemento della serie selezionato.
+     *      -1 nel caso il punto passato per parametro non corrisponda a nessun
+     *      elemento
+     */
     private int pickCorrelation(float touch_x, float touch_y) {
-        // riporto la x e la y nel sistema di coordinate del controllo
-        // applicando le trasformazioni al contrario
-
+        // riporto la x e la y nel sistema di riferimento del controllo
+        // applicando le trasformazioni in ordine inverso
         float x = (touch_x / zoom) - translate.x - axisDelta;
         float y = (touch_y / zoom) - translate.y - axisDelta;
 
 
+        // creo un quadrato centrato nei punti della serie
+        // che rappresentino le aree "toccabili" dall'utente
+        // questo perche' e' impensabile che il vostro utente
+        // sia preciso al pixel puntando un elemento con il tocco.
         RectF area = new RectF();
         int i = 0;
         for (PointF p : points) {
@@ -525,22 +580,24 @@ public class LineGraph extends View {
                     p.x + TOUCHSIZE / 2,
                     p.y + TOUCHSIZE / 2);
             if (area.contains(x, y)) {
+                // l'area toccabile contiene il punto della serie,
+                // ho trovato il mio elemento
                 return i;
             } else {
                 i++;
             }
         }
 
+        // sono uscito dal for senza restituire nessun valore, l'utente
+        // non ha selezionato alcun elemento.
         return -1;
     }
 
     //endregion
 
-    private void updateGraph() {
-
-        this.invalidate();
-    }
-
+    /**
+     * Aggiorna il massimo ed il minimo della serie per il disegno
+     */
     private void updateRange() {
         min = Double.MAX_VALUE;
         max = Double.MIN_VALUE;

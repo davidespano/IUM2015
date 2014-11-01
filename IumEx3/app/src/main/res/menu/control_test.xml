@@ -1,8 +1,12 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".ControlTest" >
-    <item android:id="@+id/action_settings"
-        android:title="@string/action_settings"
+    <item android:id="@+id/dark"
+        android:title="Tema scuro"
+        android:orderInCategory="100"
+        android:showAsAction="never" />
+    <item android:id="@+id/light"
+        android:title="Tema chiaro"
         android:orderInCategory="100"
         android:showAsAction="never" />
 </menu>
